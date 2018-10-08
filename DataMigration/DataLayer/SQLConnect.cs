@@ -8,36 +8,36 @@ using DataMigration.PostgresDB;
 using System.IO;
 using System.Xml.Linq;
 using System.Xml.Serialization;
-using DataMigration.Loggers;
+using DataMigration.Logger;
 
 namespace DataMigration.DataLayer
 {
-    public class SQLConnect
+    public class SqlConnect
     {
-        Logger Log=new Logger();
+        private Logger.Logger _log=new Logger.Logger();
 
-        public void StartLogConsole(Logger logger)
+        public void StartLogConsole(Logger.Logger logger)
         {
-            Log = new Logger(logger);
+            _log = new Logger.Logger(logger);
         }
-        public List<VanguardDoc> GetVanguardDocuments(string connectString,List<string> docPathes)
+        public List<VanguardDoc> GetVanguardDocuments(string connectString,List<string> docPaths)
         {
-            var docs = new List<VanguardDoc>();
-            if (docPathes.Count == 0)
+            var vanguardDocs = new List<VanguardDoc>();
+            if (docPaths.Count == 0)
             {
-                Log.WriteLog(LogLevel.INFO, $"No documents to read \n");
-                return docs;
+                _log.WriteLog(LogLevel.Info, "No documents to read \n");
+                return vanguardDocs;
             }
             try
             {
-                Log.WriteLog(LogLevel.INFO, $"Write documents in xml to make temporaly table in order to simplify detting data from DM_CONTENT table \n");
+                _log.WriteLog(LogLevel.Info, "Write documents in xml to make temporaly table in order to simplify detting data from DM_CONTENT table \n");
                 string resultStr;
                 using (var memoryStream = new MemoryStream())
                 {
                     using (TextWriter streamWriter = new StreamWriter(memoryStream))
                     {
                         var xmlSerializer = new XmlSerializer(typeof(List<string>));
-                        xmlSerializer.Serialize(streamWriter, docPathes);
+                        xmlSerializer.Serialize(streamWriter, docPaths);
                         resultStr = XElement.Parse(Encoding.ASCII.GetString(memoryStream.ToArray())).ToString(SaveOptions.OmitDuplicateNamespaces);
                     }
                 }
@@ -51,14 +51,14 @@ namespace DataMigration.DataLayer
                             CommandType = CommandType.Text,
                             Connection = connection,
                             CommandTimeout = 0,
-                            CommandText = string.Format(@"
+                            CommandText = (@"
                         declare @doc table (DocPath varchar(max)) 
                         insert into @doc select tbl.col.value('.[1]', 'varchar(max)') from @XML.nodes('ArrayOfString/string') tbl(col) 
                         select dmc.DM_ID, dmc.DMC_ID, dmc.DMC_PATH, dm.DEPT_ID
-                        from VG{0}.DOC_MASTER dm
-                        join VG{0}.DM_CONTENT dmc on dmc.DM_ID = dm.DM_ID
-                        join VG{0}.DM_OCR_PROCESS ocr on ocr.DMC_ID = dmc.DMC_ID
-                        join @doc d on d.DocPath = dmc.DMC_PATH", 48215)
+                        from VG48215.DOC_MASTER dm
+                        join VG48215.DM_CONTENT dmc on dmc.DM_ID = dm.DM_ID
+                        join VG48215.DM_OCR_PROCESS ocr on ocr.DMC_ID = dmc.DMC_ID
+                        join @doc d on d.DocPath = dmc.DMC_PATH")
                         })
                         {
                             command.Parameters.Add("@XML", SqlDbType.Xml);
@@ -68,7 +68,7 @@ namespace DataMigration.DataLayer
                             {
                                 while (reader.Read())
                                 {
-                                    docs.Add(new VanguardDoc
+                                    vanguardDocs.Add(new VanguardDoc
                                     {
                                         DocId = Convert.ToInt64(reader["DM_ID"]),
                                         DmcId = Convert.ToInt64(reader["DMC_ID"]),
@@ -87,28 +87,39 @@ namespace DataMigration.DataLayer
             }
             catch (Exception ex)
             {
-                Log.WriteLog(LogLevel.ERROR, ex.Message + "\n" + ex.StackTrace);
+                _log.WriteLog(LogLevel.Info, "Something wrong with executing command or with data in table \n");
+                _log.WriteLog(LogLevel.Error, ex.Message + "\n" + ex.StackTrace);
             }
-            return docs;
+            return vanguardDocs;
         }
 
         public void UpdateDM_OCR_PROCESS(string connectString,List<VanguardDoc> vanguardDocs)
         {
-            IEnumerable<long> docIds = vanguardDocs.Select(i => i.DmcId);
+            const int newStatus = 2;
+            const int newErrorCount = 0;
+            if (vanguardDocs.Count==0)
+            {
+                _log.WriteLog(LogLevel.Info, "No data to update \n");
+                return;
+            }
+            IEnumerable<long> docIds = vanguardDocs.Select(i => i.DmcId).ToArray();
             try
             {
-                Log.WriteLog(LogLevel.INFO, $"Update DM_OCR_PROCESS (VanguardDb) with ids-->({string.Join(",", docIds)})\n");
-                using (SqlConnection conn = new SqlConnection(connectString))
+                _log.WriteLog(LogLevel.Info, $"Update DM_OCR_PROCESS (VanguardDb) with ids-->({string.Join(",", docIds)})\n");
+                using (var conn = new SqlConnection(connectString))
                 {
                     conn.Open();
-                    SqlCommand command = new SqlCommand("UPDATE [VG48215].[DM_OCR_PROCESS] SET STATUS=2 ,ERROR_COUNT=0 WHERE DMC_ID IN " + $"({string.Join(",", docIds)})");
-                    command.Connection = conn;
+                    var command =
+                        new SqlCommand(
+                            $"UPDATE [VG48215].[DM_OCR_PROCESS] SET STATUS={newStatus} ,ERROR_COUNT={newErrorCount} WHERE DMC_ID IN " +
+                            $"({string.Join(",", docIds)})") {Connection = conn};
                     command.ExecuteNonQuery();
                 }
             }
             catch (Exception ex)
             {
-                Log.WriteLog(LogLevel.ERROR, ex.Message + "\n" + ex.StackTrace);
+                _log.WriteLog(LogLevel.Info, "Something wrong with executing command or with data in table \n");
+                _log.WriteLog(LogLevel.Error, ex.Message + "\n" + ex.StackTrace);
             }
         }
     }

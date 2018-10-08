@@ -1,11 +1,11 @@
-﻿namespace DataMigration.Loggers
+﻿namespace DataMigration.Logger
 {
     public enum LogLevel
     {
-        DEBUG,
-        ERROR,
-        FATAL,
-        INFO,
-        WARNING
+        Debug,
+        Error,
+        Fatal,
+        Info,
+        Warning
     }
 }

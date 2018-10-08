@@ -1,17 +1,17 @@
-﻿namespace DataMigration.Loggers
+﻿namespace DataMigration.Logger
 {
     public class Logger
     {
-        private MainWindow _window;
+        private readonly MainWindow _window;
 
-        private object _locker = new object();
-        public Logger(MainWindow window) { this._window = window; }
+        private readonly object _locker = new object();
+        public Logger(MainWindow window) { _window = window; }
 
         public Logger() { }
 
         public Logger(Logger logger)
         {
-            this._window = logger._window;
+            _window = logger._window;
         }
 
         public void WriteLog(LogLevel l, string message)
