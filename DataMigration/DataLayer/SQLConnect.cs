@@ -54,10 +54,10 @@ namespace DataMigration.DataLayer
         }
         public List<VanguardDoc> GetVanguardDocuments(string connectString,string resultStr)
         {
-            var vanguardDocs = new List<VanguardDoc>();
-            var tenant = ConfigurationManager.AppSettings["Tenant"];
+            var vanguardDocs = new List<VanguardDoc>();            
             try
             {
+                var tenant = ConfigurationManager.AppSettings["Tenant"];
                 using (var connection = new SqlConnection(connectString))
                 {
                     connection.Open();
@@ -102,9 +102,7 @@ namespace DataMigration.DataLayer
         }
 
         public void UpdateDM_OCR_PROCESS(string connectString,List<VanguardDoc> vanguardDocs)
-        {
-            var newStatus = Convert.ToInt32(ConfigurationManager.AppSettings["Status"]);
-            var newErrorCount = Convert.ToInt32(ConfigurationManager.AppSettings["ErrorCount"]);
+        {          
             if (vanguardDocs.Count==0)
             {
                 _log.WriteLog(LogLevel.Info, "No data to update \n");
@@ -113,6 +111,8 @@ namespace DataMigration.DataLayer
             IEnumerable<long> docIds = vanguardDocs.Select(i => i.DmcId).ToArray();
             try
             {
+                var newStatus = Convert.ToInt32(ConfigurationManager.AppSettings["Status"]);
+                var newErrorCount = Convert.ToInt32(ConfigurationManager.AppSettings["ErrorCount"]);
                 _log.WriteLog(LogLevel.Info, $"Update DM_OCR_PROCESS (VanguardDb) with ids-->({string.Join(",", docIds)})\n");
                 var tenant = ConfigurationManager.AppSettings["Tenant"];
                 using (var conn = new SqlConnection(connectString))
@@ -127,7 +127,7 @@ namespace DataMigration.DataLayer
             }
             catch (Exception ex)
             {
-                _log.WriteLog(LogLevel.Error, "Error while uptading data into DM_OCR_PROCESS. Error details: \n" + ex.Message + "\n");
+                _log.WriteLog(LogLevel.Error, "Error while updating data into DM_OCR_PROCESS. Error details: \n" + ex.Message + "\n");
             }
         }
     }

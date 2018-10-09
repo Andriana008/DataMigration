@@ -1,10 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Windows;
 using System.Configuration;
 using Npgsql;
-using DataMigration.PostgresDB;
 using DataMigration.DataLayer;
 using DataMigration.Logger;
 

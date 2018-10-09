@@ -83,14 +83,21 @@ namespace DataMigration.DataLayer
                 _log.WriteLog(LogLevel.Info, "No historicData to insert \n");
                 return;
             }
-            using (var conn = new NpgsqlConnection(connectString))
+            try
             {
-                conn.Open();
-                for (var i = 0; i < historicData.Count; i++)
+                using (var conn = new NpgsqlConnection(connectString))
                 {
-                    historicData[i].Data = ReplaceUnsupportedCharacters(historicData[i].Data, "'", ".");
-                    InsertOcrData(conn, historicData[i], docs[i]);
+                    conn.Open();
+                    for (var i = 0; i < historicData.Count; i++)
+                    {
+                        historicData[i].Data = ReplaceUnsupportedCharacters(historicData[i].Data, "'", ".");
+                        InsertOcrData(conn, historicData[i], docs[i]);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _log.WriteLog(LogLevel.Error, "Error while inserting ocr data. Error details: \n" + ex.Message + "\n");
             }
         }
 
@@ -129,13 +136,21 @@ namespace DataMigration.DataLayer
                 _log.WriteLog(LogLevel.Info, "No historicData to remove \n");
                 return;
             }
-            using (var conn = new NpgsqlConnection(connectString))
+            try
             {
-                conn.Open();
-                foreach (var t in historicData)
+                using (var conn = new NpgsqlConnection(connectString))
                 {
-                    RemoveHistoricalOcrData(conn, t);
+                    conn.Open();
+                    foreach (var t in historicData)
+                    {
+                        RemoveHistoricalOcrData(conn, t);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _log.WriteLog(LogLevel.Error,
+                    "Error while removing historic data. Error details: \n" + ex.Message + "\n");
             }
         }
 
