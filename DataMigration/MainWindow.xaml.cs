@@ -18,7 +18,7 @@ namespace DataMigration
     {
 
         private const int Limit =10;
-        private int _totalCount = 30;
+        private int _totalCount;
 
         private Logger.Logger _logger = new Logger.Logger();
         private readonly PostgresConnect _postgresConnect = new PostgresConnect();
@@ -52,6 +52,7 @@ namespace DataMigration
 
         private void Data_Migration_Click(object sender, RoutedEventArgs e)
         {
+            _totalCount = _postgresConnect.GetCountOfHistoricData(LocalPostgreConnectionString);
             while (_totalCount > 0)
             {
                 _logger.WriteLog(LogLevel.Info, $"Get {Limit} documents paths from (Postgres) \n");
@@ -78,7 +79,7 @@ namespace DataMigration
 
                 _logger.WriteLog(LogLevel.Info, "Delete data from historical_ocr (Postgres) \n");
 
-                _postgresConnect.RemoveHistoricalData(LocalPostgreConnectionString, _historicalOcrData);
+                //_postgresConnect.RemoveHistoricalData(LocalPostgreConnectionString, _historicalOcrData);
 
                 _totalCount -=Limit;
 

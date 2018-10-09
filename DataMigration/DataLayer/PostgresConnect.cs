@@ -17,6 +17,26 @@ namespace DataMigration.DataLayer
         {
             _log = new Logger.Logger(logger);
         }
+
+        public int GetCountOfHistoricData(string connectString)
+        {
+            var res=0;
+            using (var conn = new NpgsqlConnection(connectString))
+            {
+                conn.Open();
+                using (var command = GetCommand(conn, "select count(*) from historical_ocr_data"))
+                {
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            res = reader.GetInt32(0);
+                        }
+                    }
+                }
+            }
+            return res;
+        }
         public List<string> GetAllHistoricPaths(string connectString,int limit)
         {
             var docs=new List<string>();
