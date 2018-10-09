@@ -21,19 +21,21 @@ namespace DataMigration.DataLayer
         public int GetCountOfHistoricData(string connectString)
         {
             var res=0;
-            using (var conn = new NpgsqlConnection(connectString))
+            try
             {
-                conn.Open();
-                using (var command = GetCommand(conn, "select count(*) from historical_ocr_data"))
+                using (var conn = new NpgsqlConnection(connectString))
                 {
-                    using (var reader = command.ExecuteReader())
+                    conn.Open();
+                    using (var command = GetCommand(conn, "select count(*) from historical_ocr_data"))
                     {
-                        while (reader.Read())
-                        {
-                            res = reader.GetInt32(0);
-                        }
+                        res = Convert.ToInt32(command.ExecuteScalar());
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                _log.WriteLog(LogLevel.Error,
+                    "Error while getting historic paths. Error details: \n" + ex.Message + "\n");
             }
             return res;
         }
@@ -60,8 +62,7 @@ namespace DataMigration.DataLayer
             }
             catch (Exception ex)
             {
-                _log.WriteLog(LogLevel.Info, "Something wrong with executing command or with data in table \n");
-                _log.WriteLog(LogLevel.Error, ex.Message + "\n" + ex.StackTrace);
+                _log.WriteLog(LogLevel.Error, "Error while getting historic paths. Error details: \n" + ex.Message + "\n");
             }
             return docs;
         }
@@ -82,10 +83,14 @@ namespace DataMigration.DataLayer
                 _log.WriteLog(LogLevel.Info, "No historicData to insert \n");
                 return;
             }
-            for (var i = 0; i < historicData.Count; i++)
+            using (var conn = new NpgsqlConnection(connectString))
             {
-                historicData[i].Data = ReplaceUnsupportedCharacters(historicData[i].Data, "'", ".");
-                InsertOcrData(connectString, historicData[i], docs[i]);
+                conn.Open();
+                for (var i = 0; i < historicData.Count; i++)
+                {
+                    historicData[i].Data = ReplaceUnsupportedCharacters(historicData[i].Data, "'", ".");
+                    InsertOcrData(conn, historicData[i], docs[i]);
+                }
             }
         }
 
@@ -94,30 +99,26 @@ namespace DataMigration.DataLayer
             return word.Contains(oldChar) ? word.Replace(oldChar, newChar) : word;
         }
 
-        public void InsertOcrData(string connectString, HistoricalOcrData histoticData, VanguardDoc docs)
+        public void InsertOcrData(NpgsqlConnection conn, HistoricalOcrData histoticData, VanguardDoc docs)
         {
-            const string newErrorMessage = "0";
             try
             {
-                _log.WriteLog(LogLevel.Info, $"Insert ocrData with path <'{histoticData.FullFilePath}'> into (Postgres) database \n");
-                using (var conn = new NpgsqlConnection(connectString))
+                _log.WriteLog(LogLevel.Info,
+                    $"Insert ocrData with path <'{histoticData.FullFilePath}'> into (Postgres) database \n");
+                using (var command = GetCommand(conn,
+                    "INSERT INTO \"public\".\"ocr_data\" (\"DocId\", \"TenantId\", \"ErrorMessage\", \"StatusId\"," +
+                    $" \"Data\", \"createdAt\", \"updatedAt\") VALUES({docs.DocId}, {histoticData.TenantId},  '{null}', {histoticData.StatusId}, '{histoticData.Data}'," +
+                    $" '{histoticData.CreatedAt}', '{histoticData.UpdatedAt}') " +
+                    "ON CONFLICT ON CONSTRAINT ocr_data_pkey " +
+                    $"DO UPDATE SET \"ErrorMessage\" = '{null}', \"StatusId\" = {histoticData.StatusId}," +
+                    $"\"createdAt\" = '{histoticData.CreatedAt}', \"updatedAt\" = '{histoticData.UpdatedAt}'"))
                 {
-                    conn.Open();
-                    using (var command = GetCommand(conn, "INSERT INTO \"public\".\"ocr_data\" (\"DocId\", \"TenantId\", \"ErrorMessage\", \"StatusId\"," +
-                   $" \"Data\", \"createdAt\", \"updatedAt\") VALUES({docs.DocId}, {histoticData.TenantId},  '{newErrorMessage}', {histoticData.StatusId}, '{histoticData.Data}'," +
-                   $" '{histoticData.CreatedAt}', '{histoticData.UpdatedAt}') " +
-                   "ON CONFLICT ON CONSTRAINT ocr_data_pkey " +
-                   $"DO UPDATE SET \"ErrorMessage\" = '{newErrorMessage}', \"StatusId\" = {histoticData.StatusId}," +
-                   $"\"createdAt\" = '{histoticData.CreatedAt}', \"updatedAt\" = '{histoticData.UpdatedAt}'"))
-                    {
-                        command.ExecuteNonQuery();
-                    }
+                    command.ExecuteNonQuery();
                 }
             }
             catch (Exception ex)
             {
-                _log.WriteLog(LogLevel.Info, "Something wrong with executing command or with data in table \n");
-                _log.WriteLog(LogLevel.Error, ex.Message + "\n" + ex.StackTrace);
+                _log.WriteLog(LogLevel.Error, "Error while inserting ocr data. Error details: \n" + ex.Message + "\n");
             }
         }
 
@@ -128,31 +129,32 @@ namespace DataMigration.DataLayer
                 _log.WriteLog(LogLevel.Info, "No historicData to remove \n");
                 return;
             }
-            foreach (var t in historicData)
+            using (var conn = new NpgsqlConnection(connectString))
             {
-                RemoveHistoricalOcrData(connectString, t);
+                conn.Open();
+                foreach (var t in historicData)
+                {
+                    RemoveHistoricalOcrData(conn, t);
+                }
             }
         }
 
-        public void RemoveHistoricalOcrData(string connectString, HistoricalOcrData historicData)
+        public void RemoveHistoricalOcrData(NpgsqlConnection conn, HistoricalOcrData historicData)
         {
             try
             {
-                _log.WriteLog(LogLevel.Info, $"Remove historicalData with path <'{historicData.FullFilePath}'> from (Postgres) database \n");
-                using (var conn = new NpgsqlConnection(connectString))
-                {
-                    conn.Open();
-                    using (var command = GetCommand(conn,
+                _log.WriteLog(LogLevel.Info,
+                    $"Remove historicalData with path <'{historicData.FullFilePath}'> from (Postgres) database \n");
+                using (var command = GetCommand(conn,
                     $"DELETE FROM historical_ocr_data WHERE fullfilepath = '{historicData.FullFilePath}'"))
-                    {
-                        command.ExecuteNonQuery();
-                    }
+                {
+                    command.ExecuteNonQuery();
                 }
+
             }
             catch (Exception ex)
             {
-                _log.WriteLog(LogLevel.Info, "Something wrong with executing command or with data in table \n");
-                _log.WriteLog(LogLevel.Error, ex.Message + "\n" + ex.StackTrace);
+                _log.WriteLog(LogLevel.Error, "Error while removing historic data. Error details: \n" + ex.Message + "\n");
             }
         }
         public List<HistoricalOcrData> GetPostgresHistoricData(string connectString,List<VanguardDoc>vanguardDocs)
@@ -193,8 +195,7 @@ namespace DataMigration.DataLayer
             }
             catch (Exception ex)
             {
-                _log.WriteLog(LogLevel.Info, "Something wrong with executing command or with data in table \n");
-                _log.WriteLog(LogLevel.Error, ex.Message + "\n" + ex.StackTrace);
+                _log.WriteLog(LogLevel.Error, "Error while getting historic data. Error details: \n" + ex.Message + "\n");
             }
             return historicData;           
         }
