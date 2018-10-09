@@ -79,7 +79,7 @@ namespace DataMigration
 
                 _logger.WriteLog(LogLevel.Info, "Delete data from historical_ocr (Postgres) \n");
 
-                //_postgresConnect.RemoveHistoricalData(LocalPostgreConnectionString, _historicalOcrData);
+                _postgresConnect.RemoveHistoricalData(LocalPostgreConnectionString, _historicalOcrData);
 
                 _totalCount -=Limit;
 
