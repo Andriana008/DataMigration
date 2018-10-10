@@ -65,6 +65,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Helper.cs" />
     <Compile Include="VanguardDB\DM_CONTENT.cs" />
     <Compile Include="VanguardDB\DM_OCR_PROCESS.cs" />
     <Compile Include="Logger\Logger.cs" />

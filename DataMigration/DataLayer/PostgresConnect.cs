@@ -13,59 +13,32 @@ namespace DataMigration.DataLayer
     {
         private Logger.Logger _log = new Logger.Logger();
 
+        private readonly Helper _help = new Helper();
+
         public void StartLogConsole(Logger.Logger logger)
         {
             _log = new Logger.Logger(logger);
         }
 
-        public int GetCountOfHistoricData(string connectString)
+        public int GetCountOfHistoricData(NpgsqlConnection connection)
         {
-            var res=0;
+            var countOfHistoricData = 0;
             try
             {
-                using (var conn = new NpgsqlConnection(connectString))
+                using (var command = GetCommand(connection, "select count(*) from historical_ocr_data"))
                 {
-                    conn.Open();
-                    using (var command = GetCommand(conn, "select count(*) from historical_ocr_data"))
-                    {
-                        res = Convert.ToInt32(command.ExecuteScalar());
-                    }
+                    countOfHistoricData = Convert.ToInt32(command.ExecuteScalar());
                 }
+
             }
             catch (Exception ex)
             {
                 _log.WriteLog(LogLevel.Error,
                     "Error while getting historic paths. Error details: \n" + ex.Message + "\n");
             }
-            return res;
+            return countOfHistoricData;
         }
-        public List<string> GetAllHistoricPaths(string connectString,int limit)
-        {
-            var docs=new List<string>();
-            try
-            {
-                _log.WriteLog(LogLevel.Info, $"Get {limit} historic paths (Postgres)\n");
-                using (var conn = new NpgsqlConnection(connectString))
-                {
-                    conn.Open();
-                    using (var command = GetCommand(conn, $"SELECT fullfilepath FROM historical_ocr_data LIMIT {limit}"))
-                    {
-                        using (var reader = command.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                docs.Add(ReplaceUnsupportedCharacters(reader.GetString(0), "/", "\\"));
-                            }
-                        }
-                    }
-                }               
-            }
-            catch (Exception ex)
-            {
-                _log.WriteLog(LogLevel.Error, "Error while getting historic paths. Error details: \n" + ex.Message + "\n");
-            }
-            return docs;
-        }
+
         public NpgsqlCommand GetCommand(NpgsqlConnection connection, string commandText)
         {
             return new NpgsqlCommand
@@ -76,7 +49,21 @@ namespace DataMigration.DataLayer
                 CommandText = commandText
             };
         }
-        public void InsertOcr(string connectString,List<HistoricalOcrData> historicData, List<VanguardDoc> docs)
+
+        public List<HistoricalOcrData> RemoveUnmatchingHistoricData(List<HistoricalOcrData> historicData, List<VanguardDoc> docs)
+        {
+            var docsPaths = docs.Select(i => i.DocPath);
+            var historicPaths = historicData.Select(i => i.FullFilePath).ToList();
+            foreach (var item in docsPaths)
+            {
+                if (historicPaths.Contains(item)) continue;
+                _log.WriteLog(LogLevel.Info, "Files paths don't match,delete data \n");
+                historicData.RemoveAll(i => i.FullFilePath == item);
+            }
+            return historicData;
+        }
+
+        public void InsertOcr(NpgsqlConnection connection, List<HistoricalOcrData> historicData, List<VanguardDoc> docs)
         {
             if (historicData.Count == 0)
             {
@@ -85,14 +72,10 @@ namespace DataMigration.DataLayer
             }
             try
             {
-                using (var conn = new NpgsqlConnection(connectString))
+                for (var i = 0; i < historicData.Count; i++)
                 {
-                    conn.Open();
-                    for (var i = 0; i < historicData.Count; i++)
-                    {
-                        historicData[i].Data = ReplaceUnsupportedCharacters(historicData[i].Data, "'", ".");
-                        InsertOcrData(conn, historicData[i], docs[i]);
-                    }
+                    historicData[i].Data = _help.ReplaceUnsupportedCharacters(historicData[i].Data, "'", ".");
+                    InsertOcrData(connection, historicData[i], docs[i]);
                 }
             }
             catch (Exception ex)
@@ -101,18 +84,13 @@ namespace DataMigration.DataLayer
             }
         }
 
-        public string ReplaceUnsupportedCharacters(string word,string oldChar,string newChar)
-        {
-            return word.Contains(oldChar) ? word.Replace(oldChar, newChar) : word;
-        }
-
-        public void InsertOcrData(NpgsqlConnection conn, HistoricalOcrData histoticData, VanguardDoc docs)
+        public void InsertOcrData(NpgsqlConnection connection, HistoricalOcrData histoticData, VanguardDoc docs)
         {
             try
             {
                 _log.WriteLog(LogLevel.Info,
                     $"Insert ocrData with path <'{histoticData.FullFilePath}'> into (Postgres) database \n");
-                using (var command = GetCommand(conn,
+                using (var command = GetCommand(connection,
                     "INSERT INTO \"public\".\"ocr_data\" (\"DocId\", \"TenantId\", \"ErrorMessage\", \"StatusId\"," +
                     $" \"Data\", \"createdAt\", \"updatedAt\") VALUES({docs.DocId}, {histoticData.TenantId},  '{null}', {histoticData.StatusId}, '{histoticData.Data}'," +
                     $" '{histoticData.CreatedAt}', '{histoticData.UpdatedAt}') " +
@@ -129,7 +107,7 @@ namespace DataMigration.DataLayer
             }
         }
 
-        public void RemoveHistoricalData(string connectString, List<HistoricalOcrData> historicData)
+        public void RemoveHistoricalData(NpgsqlConnection connection, List<HistoricalOcrData> historicData)
         {
             if (historicData.Count == 0)
             {
@@ -138,13 +116,9 @@ namespace DataMigration.DataLayer
             }
             try
             {
-                using (var conn = new NpgsqlConnection(connectString))
+                foreach (var t in historicData)
                 {
-                    conn.Open();
-                    foreach (var t in historicData)
-                    {
-                        RemoveHistoricalOcrData(conn, t);
-                    }
+                    RemoveHistoricalOcrData(connection, t);
                 }
             }
             catch (Exception ex)
@@ -154,13 +128,13 @@ namespace DataMigration.DataLayer
             }
         }
 
-        public void RemoveHistoricalOcrData(NpgsqlConnection conn, HistoricalOcrData historicData)
+        public void RemoveHistoricalOcrData(NpgsqlConnection connection, HistoricalOcrData historicData)
         {
             try
             {
                 _log.WriteLog(LogLevel.Info,
                     $"Remove historicalData with path <'{historicData.FullFilePath}'> from (Postgres) database \n");
-                using (var command = GetCommand(conn,
+                using (var command = GetCommand(connection,
                     $"DELETE FROM historical_ocr_data WHERE fullfilepath = '{historicData.FullFilePath}'"))
                 {
                     command.ExecuteNonQuery();
@@ -169,50 +143,45 @@ namespace DataMigration.DataLayer
             }
             catch (Exception ex)
             {
-                _log.WriteLog(LogLevel.Error, "Error while removing historic data. Error details: \n" + ex.Message + "\n");
+                _log.WriteLog(LogLevel.Error,
+                    "Error while removing historic data. Error details: \n" + ex.Message + "\n");
             }
         }
-        public List<HistoricalOcrData> GetPostgresHistoricData(string connectString,List<VanguardDoc>vanguardDocs)
+        public List<HistoricalOcrData> GetPostgresHistoricData(NpgsqlConnection connection, int limit)
         {
             var historicData = new List<HistoricalOcrData>();
-            if (vanguardDocs.Count == 0)
-            {
-                _log.WriteLog(LogLevel.Info, "No vanguard documents \n");
-            }
             try
             {
                 _log.WriteLog(LogLevel.Info, "Get historicalData from (Postgres) database \n");
-                using (var conn = new NpgsqlConnection(connectString))
+                using (var command = GetCommand(connection,
+                    $"SELECT tenantid, fullfilepath, errormessage, statusid,Data, createdat, updatedat FROM historical_ocr_data limit {limit}")
+                )
                 {
-                    var paths = vanguardDocs.Select(i => i.DocPath);
-                    conn.Open();
-                    using (var command = GetCommand(conn, "SELECT tenantid, fullfilepath, errormessage, statusid,Data, createdat, updatedat FROM historical_ocr_data  " +
-                        $" where fullfilepath IN ('{string.Join("','", paths)}')"))
+                    using (var reader = command.ExecuteReader())
                     {
-                        using (var reader = command.ExecuteReader())
+                        while (reader.Read())
                         {
-                            while (reader.Read())
+                            historicData.Add(new HistoricalOcrData
                             {
-                                historicData.Add(new HistoricalOcrData
-                                {
-                                    TenantId = Convert.ToInt32(reader["TenantId"]),
-                                    FullFilePath = Convert.ToString(reader["FullFilePath"]),
-                                    ErrorMessage = Convert.ToString(reader["ErrorMessage"]),
-                                    StatusId = Convert.ToInt32(reader["StatusId"]),
-                                    Data = Convert.ToString(reader["Data"]),
-                                    CreatedAt = reader.Get​Provider​Specific​Value(reader.GetOrdinal("createdAt")),
-                                    UpdatedAt = reader.Get​Provider​Specific​Value(reader.GetOrdinal("updatedAt"))
-                                });
-                            }
+                                TenantId = Convert.ToInt32(reader["TenantId"]),
+                                FullFilePath = Convert.ToString(reader["FullFilePath"]),
+                                ErrorMessage = Convert.ToString(reader["ErrorMessage"]),
+                                StatusId = Convert.ToInt32(reader["StatusId"]),
+                                Data = Convert.ToString(reader["Data"]),
+                                CreatedAt = reader.Get​Provider​Specific​Value(reader.GetOrdinal("createdAt")),
+                                UpdatedAt = reader.Get​Provider​Specific​Value(reader.GetOrdinal("updatedAt"))
+                            });
                         }
                     }
                 }
+
             }
             catch (Exception ex)
             {
-                _log.WriteLog(LogLevel.Error, "Error while getting historic data. Error details: \n" + ex.Message + "\n");
+                _log.WriteLog(LogLevel.Error,
+                    "Error while getting historic data. Error details: \n" + ex.Message + "\n");
             }
-            return historicData;           
+            return historicData;
         }
     }
 }
