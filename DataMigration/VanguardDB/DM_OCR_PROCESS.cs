@@ -2,25 +2,25 @@
 
 namespace DataMigration.VanguardDB
 {
-    public class DM_OCR_PROCESS
+    public class DmOcrProcess
     {
-        public long DMC_ID { get; set; }
+        public long DmcId { get; set; }
 
-        public int OCR_STATE { get; set; }
+        public int OcrState { get; set; }
 
-        public int STATUS { get; set; }
+        public int Status { get; set; }
 
-        public short ERROR_COUNT { get; set; }
+        public short ErrorCount { get; set; }
 
-        public string LAST_ERROR { get; set; }
+        public string LastError { get; set; }
 
-        public DateTime? START_DATE { get; set; }
+        public DateTime? StartDate { get; set; }
 
-        public int PRIORITY { get; set; }
+        public int Priority { get; set; }
 
-        public byte INDEXING_STATUS { get; set; }
+        public byte IndexingStatus { get; set; }
 
-        public bool QUEUED { get; set; }
+        public bool Queued { get; set; }
 
     }
 }

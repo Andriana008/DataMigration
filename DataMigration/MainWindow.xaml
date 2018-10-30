@@ -6,10 +6,11 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="762.602" Width="777.242">
     <Grid Margin="0,0,2,-2">
-        <Button Content="Migrate Data" HorizontalAlignment="Left" Height="34" Margin="265,10,0,0" VerticalAlignment="Top" Width="195" Click="Data_Migration_Click"/>
+        <Button Content="MigrateData" HorizontalAlignment="Left" Height="34" Margin="60,10,0,0" VerticalAlignment="Top" Width="195" Click="Data_Migration_Click"/>
         <ScrollViewer HorizontalAlignment="Left" Height="661" Margin="10,63,0,0" VerticalAlignment="Top" Width="747">
             <TextBlock Name="OutputBlock" TextWrapping="Wrap"><Run/><LineBreak/><Run/></TextBlock>
         </ScrollViewer>
+        <Button Content="RabbitMigrate" Name="RabbitButtom" HorizontalAlignment="Left" Height="34" Margin="426,10,0,0" VerticalAlignment="Top" Width="195" Click="Rabbit_Migration_Click" />
 
     </Grid>
 </Window>
