@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading;
+using System.Threading.Tasks;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using DataMigration.Logger;
@@ -34,25 +35,38 @@ namespace DataMigration.Rabbit
             _queueName = name;
         }
 
-        public void Receive(EventHandler<BasicDeliverEventArgs> handler)
+        public async void Receive(EventHandler<BasicDeliverEventArgs> handler)
         {
-            ConsumingChannel.QueueDeclare(queue: $"{_queueName}",
-                durable: false,
-                exclusive: false,
-                autoDelete: false,
-                arguments: null);
+            try
+            {
+                await Task.Run(() =>
+                {
+                    ConsumingChannel.QueueDeclare(queue: $"{_queueName}",
+                        durable: false,
+                        exclusive: false,
+                        autoDelete: false,
+                        arguments: null);
 
-            var consumer = new EventingBasicConsumer(ConsumingChannel);
+                    var consumer = new EventingBasicConsumer(ConsumingChannel);
 
-            consumer.Received += handler;
+                    consumer.Received += handler;
 
-            var messageCount = ConsumingChannel.MessageCount(_queueName);
-            _log.WriteLog(LogLevel.Info,$"Message Received {messageCount} \n");
-            ConsumingChannel.BasicConsume(queue: $"{_queueName}",
-                autoAck: true,
-                consumer: consumer);
+                    var messageCount = ConsumingChannel.MessageCount(_queueName);
 
-            Thread.Sleep(4000);
+                    _log.WriteLog(LogLevel.Info, $"Message Received {messageCount} \n");
+
+                    ConsumingChannel.BasicConsume(queue: $"{_queueName}",
+                        autoAck: true,
+                        consumer: consumer);
+
+                });
+            }
+            catch (Exception ex)
+            {
+                _log.WriteLog(LogLevel.Error,
+                    "Error while receiving messages from Rabbit. Error details: \n" + ex.Message + "\n");
+            }
+
         }
     }
 }

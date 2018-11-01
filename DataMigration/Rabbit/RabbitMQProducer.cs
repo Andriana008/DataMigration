@@ -10,12 +10,13 @@ namespace DataMigration.Rabbit
 {
     public class RabbitMqProducer
     {
-        private ConnectionFactory _connectionFactory;
-        private string _queueName;
+        private readonly ConnectionFactory _connectionFactory;
+        private readonly string _queueName;
         private IConnection _connection;
         private IModel _consumingChannel;
         private IConnection Connection => _connection ?? (_connection = _connectionFactory.CreateConnection());
         private IModel ConsumingChannel => _consumingChannel ?? (_consumingChannel = Connection.CreateModel());
+
         private Logger.Logger _log = new Logger.Logger();
 
         public void StartLogConsole(Logger.Logger logger)
@@ -35,9 +36,11 @@ namespace DataMigration.Rabbit
             _queueName = name;
         }
 
-        public void Send(HistoricalOcrData historicalOcrData)
+        public void Send(HistoricalOcrDataForRabbitMq historicalOcrData)
         {
-            ConsumingChannel.QueueDeclare(queue: $"{_queueName}",
+            try
+            {
+                ConsumingChannel.QueueDeclare(queue: $"{_queueName}",
                     durable: false,
                     exclusive: false,
                     autoDelete: false,
@@ -46,23 +49,29 @@ namespace DataMigration.Rabbit
                 string message = JsonConvert.SerializeObject(historicalOcrData);
                 var body = Encoding.UTF8.GetBytes(message);
 
-            ConsumingChannel.BasicPublish(exchange: "",
+                ConsumingChannel.BasicPublish(exchange: "",
                     routingKey: $"{_queueName}",
                     basicProperties: null,
                     body: body);
 
-            _log.WriteLog(LogLevel.Info, $"[x] Sent message to rabbit :");
-
+                _log.WriteLog(LogLevel.Info, "[x] Sent message to Rabbit \n");
+            }
+            catch (Exception ex)
+            {
+                _log.WriteLog(LogLevel.Error,
+                    "Error while receiving messages from Rabbit. Error details: \n" + ex.Message + "\n");
+            }
         }
-
-        public void SentAllData(List<HistoricalOcrData> historicalOcrData)
+        public void SentAllData(List<HistoricalOcrDataForRabbitMq> historicalOcrData)
         {
-
-                foreach (var item in historicalOcrData)
-                {
-                    Send(item);
-                }
-
+            if (historicalOcrData.Count == 0)
+            {
+                _log.WriteLog(LogLevel.Info, "No data to sent to Rabbit \n");
+            }
+            foreach (var item in historicalOcrData)
+            {
+                Send(item);
+            }
         }
     }
 }

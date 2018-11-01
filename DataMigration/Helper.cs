@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Xml.Linq;
 using System.Xml.Serialization;
 using DataMigration.Logger;
+using DataMigration.PostgresDB;
 
 namespace DataMigration
 {
@@ -52,6 +54,15 @@ namespace DataMigration
             }
             return resultStr;
         }
-     
+
+        public List<HistoricalOcrDataForRabbitMq> ConvertHistoricOcrDataForRabbitConsuming(List<HistoricalOcrData> histData,List<VanguardDoc>vanguardDoc)
+        {
+            if (histData.Count == 0 || vanguardDoc.Count == 0)
+            {
+                _log.WriteLog(LogLevel.Info, "No data to convert \n");
+            }
+            _log.WriteLog(LogLevel.Info, "Converting data for Rabbit  \n");
+            return histData.Select((t, i) => new HistoricalOcrDataForRabbitMq(t.TenantId, t.FullFilePath, t.ErrorMessage, t.StatusId, ReplaceUnsupportedCharacters(t.Data, "'", "."), t.CreatedAt, t.UpdatedAt, vanguardDoc[i].DocId)).ToList();
+        }
     }
 }

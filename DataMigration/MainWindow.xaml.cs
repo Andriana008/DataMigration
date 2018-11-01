@@ -1,10 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Windows;
 using System.Configuration;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using Npgsql;
 using DataMigration.DataLayer;
 using DataMigration.Logger;
@@ -28,7 +28,6 @@ namespace DataMigration
         private readonly Helper _help = new Helper();
         private readonly RabbitMqConsumer _rabbitMqConsumer=new RabbitMqConsumer();
         private readonly RabbitMqProducer _rabbitMqProducer=new RabbitMqProducer();
-        private readonly List<HistoricalOcrData> _rabbitHistoricalData=new List<HistoricalOcrData>();
 
         public readonly string SqlConnectionString;
         public readonly string LocalPostgreConnectionString;
@@ -37,8 +36,7 @@ namespace DataMigration
 
         public MainWindow()
         {
-            InitializeComponent();          
-            StartLogConsole();
+            InitializeComponent();                    
             try
             {
                 _limit = Convert.ToInt32(ConfigurationManager.AppSettings["limit"]);
@@ -62,8 +60,7 @@ namespace DataMigration
             {
                 _logger.WriteLog(LogLevel.Error, "Error while getting connection strings from configuration. Error details: \n" + ex.Message + "\n");
             }
-            _rabbitMqProducer.StartLogConsole(_logger);
-            _rabbitMqConsumer.StartLogConsole(_logger);
+            StartLogConsole();
             CheckAllConnections();
             _logger.WriteLog(LogLevel.Info, "Start app \n");
         }
@@ -74,6 +71,8 @@ namespace DataMigration
             _postgresConnect.StartLogConsole(_logger);
             _sqlConnect.StartLogConsole(_logger);
             _help.StartLogConsole(_logger);
+            _rabbitMqProducer.StartLogConsole(_logger);
+            _rabbitMqConsumer.StartLogConsole(_logger);
             _logger.WriteLog(LogLevel.Info, "Start logger \n");
         }
         private void Data_Migration_Click(object sender, RoutedEventArgs e)
@@ -120,50 +119,51 @@ namespace DataMigration
             }
         }
 
-        private void Rabbit_Migration_Click(object sender, RoutedEventArgs e)
+        private async void Rabbit_Migration_Click(object sender, RoutedEventArgs e)
         {
-            var npgsqlLocalConnection = new NpgsqlConnection(LocalPostgreConnectionString);
-            var vanguardConnection = new SqlConnection(SqlConnectionString);
-            try
+            await Task.Run(() =>
             {
-                npgsqlLocalConnection.Open();
-                vanguardConnection.Open();
-               // var totalCount = _postgresConnect.GetCountOfHistoricData(npgsqlLocalConnection);
-                var totalCount = 2;
-                while (totalCount > 0)
+                var npgsqlLocalConnection = new NpgsqlConnection(LocalPostgreConnectionString);
+                var vanguardConnection = new SqlConnection(SqlConnectionString);
+                try
                 {
-                   
-                    _logger.WriteLog(LogLevel.Info, $"{totalCount} left \n");
+                    npgsqlLocalConnection.Open();
+                    vanguardConnection.Open();
+                    var totalCount = _postgresConnect.GetCountOfHistoricData(npgsqlLocalConnection);                   
+                    while (totalCount > 0)
+                    {
 
-                    _logger.WriteLog(LogLevel.Info, "Get historic data from (Postgres) \n");
-                    var historicalOcrData = _postgresConnect.GetPostgresHistoricData(npgsqlLocalConnection, _limit);
+                        _logger.WriteLog(LogLevel.Info, $"{totalCount} left \n");
+                        _logger.WriteLog(LogLevel.Info, "Get historic data from (Postgres) \n");
+                        var historicalOcrData = _postgresConnect.GetPostgresHistoricData(npgsqlLocalConnection, _limit);
+                        var historicalDocsToMigrate = historicalOcrData
+                            .Select(i => _help.ReplaceUnsupportedCharacters(i.FullFilePath, "/", "\\")).ToList();
+                        var resultXmlString = _help.ConvertStringsToXml(historicalDocsToMigrate);
+                        var vanguardDocsData=_sqlConnect.GetVanguardDocuments(vanguardConnection, resultXmlString);
+                        var convertHistoricOcrDataForRabbitConsuming = _help.ConvertHistoricOcrDataForRabbitConsuming(historicalOcrData, vanguardDocsData);
 
-                    _logger.WriteLog(LogLevel.Info, "Send data into (Rabbit) \n");
+                        _logger.WriteLog(LogLevel.Info, "Send data into (Rabbit) \n");
+                        _rabbitMqProducer.SentAllData(convertHistoricOcrDataForRabbitConsuming);
 
-                    _rabbitMqProducer.SentAllData(historicalOcrData);
+                        _logger.WriteLog(LogLevel.Info, "Delete data from historical_ocr (Postgres) \n");
+                        _postgresConnect.RemoveHistoricalData(npgsqlLocalConnection, historicalOcrData);
+
+                        totalCount -= _limit;
+                    }
                     _logger.WriteLog(LogLevel.Info, "Get data from (Rabbit) \n");
-
                     _rabbitMqConsumer.Receive(ReceiveMessage);
-                    
-                    _logger.WriteLog(LogLevel.Info, "Insert data in (Postgres) \n");
-                    
-                    _postgresConnect.InsertOcrRabbit(npgsqlLocalConnection, _rabbitHistoricalData);
-                    _logger.WriteLog(LogLevel.Info, "Delete data from historical_ocr (Postgres) \n");
-                    //_postgresConnect.RemoveHistoricalData(npgsqlLocalConnection, rabbitHistoricalData);
-
-                    totalCount -= _limit;
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.WriteLog(LogLevel.Error,
-                    "Error while trying to open connection strings. Error details: \n" + ex.Message + "\n");
-            }
-            finally
-            {
-                npgsqlLocalConnection.Close();
-                vanguardConnection.Close();
-            }
+                catch (Exception ex)
+                {
+                    _logger.WriteLog(LogLevel.Error,
+                        "Error while trying to open connection strings. Error details: \n" + ex.Message + "\n");
+                }
+                finally
+                {
+                    npgsqlLocalConnection.Close();
+                    vanguardConnection.Close();
+                }
+            });
         }
         private void CheckAllConnections()
         {
@@ -179,20 +179,29 @@ namespace DataMigration
                 _logger.WriteLog(LogLevel.Error, "Error while trying to open connection strings. Error details: \n" + ex.Message + "\n");
             }
         }
-        private void ReceiveMessage(object sender, BasicDeliverEventArgs e)
+        private async void ReceiveMessage(object sender, BasicDeliverEventArgs e)
         {
-            try
+            await Task.Run(() =>
             {
-                var body = e.Body;
-                var message = Encoding.UTF8.GetString(body);
-                var histOcrData = JsonConvert.DeserializeObject<HistoricalOcrData>(message);
-                _rabbitHistoricalData.Add(histOcrData);
-            }
-            catch (Exception ex)
-            {
-                _logger.WriteLog(LogLevel.Error,
-                    "Error while receiving messages. Error details: \n" + ex.Message + "\n");
-            }
+                var npgsqlLocalConnection = new NpgsqlConnection(LocalPostgreConnectionString);
+                try
+                {
+                    var body = e.Body;
+                    var message = Encoding.UTF8.GetString(body);
+                    var histOcrData = JsonConvert.DeserializeObject<HistoricalOcrDataForRabbitMq>(message);                    
+                    npgsqlLocalConnection.Open();
+                    _postgresConnect.InsertOcrDataRabbit(npgsqlLocalConnection, histOcrData);
+                }
+                catch (Exception ex)
+                {
+                    _logger.WriteLog(LogLevel.Error,
+                        "Error while receiving messages. Error details: \n" + ex.Message + "\n");
+                }
+                finally
+                {
+                    npgsqlLocalConnection.Close();
+                }
+            });
         }
     }
 }

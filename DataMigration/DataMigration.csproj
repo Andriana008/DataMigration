@@ -69,6 +69,7 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="Helper.cs" />
+    <Compile Include="PostgresDB\HistoricalOcrDataForRabbitMq.cs" />
     <Compile Include="Rabbit\RabbitMQConsumer.cs" />
     <Compile Include="Rabbit\RabbitMQProducer.cs" />
     <Compile Include="VanguardDB\DM_CONTENT.cs" />
