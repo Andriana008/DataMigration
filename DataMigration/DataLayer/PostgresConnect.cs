@@ -83,20 +83,19 @@ namespace DataMigration.DataLayer
                 _log.WriteLog(LogLevel.Error, "Error while inserting ocr data. Error details: \n" + ex.Message + "\n");
             }
         }
-
         public void InsertOcrData(NpgsqlConnection connection, HistoricalOcrData histoticData, VanguardDoc docs)
         {
             try
             {
                 _log.WriteLog(LogLevel.Info,
-                    $"Insert ocrData with path <'{histoticData.FullFilePath}'> into (Postgres) database \n");
+                    $"Insert ocrData with path <'{histoticData.FullFilePath}'> and docId <{docs.DocId}> into (Postgres) database \n");
                 using (var command = GetCommand(connection,
-                    "INSERT INTO \"public\".\"ocr_data\" (\"DocId\", \"TenantId\", \"ErrorMessage\", \"StatusId\"," +
-                    $" \"Data\", \"createdAt\", \"updatedAt\") VALUES({docs.DocId}, {histoticData.TenantId},  '{null}', {histoticData.StatusId}, '{histoticData.Data}'," +
+                    "INSERT INTO \"public\".\"ocr_data\" (\"docid\", \"errormessage\", \"statusid\"," +
+                    $" \"data\", \"createdat\", \"updatedat\") VALUES({docs.DocId},  '{null}', {histoticData.StatusId}, '{histoticData.Data}'," +
                     $" '{histoticData.CreatedAt}', '{histoticData.UpdatedAt}') " +
                     "ON CONFLICT ON CONSTRAINT ocr_data_pkey " +
-                    $"DO UPDATE SET \"ErrorMessage\" = '{null}', \"StatusId\" = {histoticData.StatusId}," +
-                    $"\"createdAt\" = '{histoticData.CreatedAt}', \"updatedAt\" = '{histoticData.UpdatedAt}'"))
+                    $"DO UPDATE SET \"errormessage\" = '{null}', \"statusid\" = {histoticData.StatusId}," +
+                    $"\"createdat\" = '{histoticData.CreatedAt}', \"updatedat\" = '{histoticData.UpdatedAt}'"))
                 {
                     command.ExecuteNonQuery();
                 }
@@ -106,7 +105,26 @@ namespace DataMigration.DataLayer
                 _log.WriteLog(LogLevel.Error, "Error while inserting ocr data. Error details: \n" + ex.Message + "\n");
             }
         }
-
+        public void InsertOcrDataRabbit(NpgsqlConnection connection, HistoricalOcrDataForRabbitMq histoticData)
+        {
+            try
+            {
+                _log.WriteLog(LogLevel.Info,
+                    $"Insert ocrData with path <'{histoticData.FullFilePath}'> and docId <{histoticData.DocId}> into (Postgres) database \n");
+                using (var command = GetCommand(connection,
+                    "INSERT INTO \"public\".\"ocr_data\" (\"docid\", \"errormessage\", \"statusid\"," +
+                    $" \"data\") VALUES({histoticData.DocId},  '{null}', {histoticData.StatusId}, '{histoticData.Data}')" +
+                    "ON CONFLICT ON CONSTRAINT ocr_data_pkey " +
+                    $"DO UPDATE SET \"errormessage\" = '{null}', \"statusid\" = {histoticData.StatusId}"))
+                {
+                    command.ExecuteNonQuery();
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.WriteLog(LogLevel.Error, "Error while inserting ocr data. Error details: \n" + ex.Message + "\n");
+            }
+        }
         public void RemoveHistoricalData(NpgsqlConnection connection, List<HistoricalOcrData> historicData)
         {
             if (historicData.Count == 0)
@@ -174,7 +192,6 @@ namespace DataMigration.DataLayer
                         }
                     }
                 }
-
             }
             catch (Exception ex)
             {

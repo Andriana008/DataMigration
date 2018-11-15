@@ -1,4 +1,6 @@
-﻿namespace DataMigration.Logger
+﻿using System.Threading.Tasks;
+
+namespace DataMigration.Logger
 {
     public class Logger
     {
@@ -14,12 +16,9 @@
             _window = logger._window;
         }
 
-        public void WriteLog(LogLevel l, string message)
+        public async void WriteLog(LogLevel l, string message)
         {
-            lock (_locker)
-            {
-                _window.OutputBlock.Inlines.Add(l + ":" + message);
-            }
+             await Task.Run(() => _window.Dispatcher.Invoke(() => _window.OutputBlock.Inlines.Add(l + ":" + message)));
         }
     }
     
