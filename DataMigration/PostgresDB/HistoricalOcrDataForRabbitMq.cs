@@ -17,18 +17,6 @@
         public object UpdatedAt { get; set; }
 
         public long DocId { get; set; }
-
-        public HistoricalOcrDataForRabbitMq(int tenantId, string fullFilePath, string errorMessage, int? statusId,
-            string data, object createdAt, object updatedAt, long docId)
-        {
-            TenantId = tenantId;
-            FullFilePath = fullFilePath;
-            ErrorMessage = errorMessage;
-            StatusId = statusId;
-            Data = data;
-            CreatedAt = createdAt;
-            UpdatedAt = updatedAt;
-            DocId = docId;
-        }
+      
     }
 }

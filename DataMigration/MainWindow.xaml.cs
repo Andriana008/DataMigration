@@ -20,12 +20,12 @@ namespace DataMigration
     /// </summary>
     public partial class MainWindow
     {
-        private readonly int _limit;
+        private readonly int _limitForBatchMigration;
 
         private Logger.Logger _logger = new Logger.Logger();
         private readonly PostgresConnect _postgresConnect = new PostgresConnect();
         private readonly SqlConnect _sqlConnect = new SqlConnect();
-        private readonly Helper _help = new Helper();
+        private readonly Helper _helper = new Helper();
         private readonly RabbitMqConsumer _rabbitMqConsumer=new RabbitMqConsumer();
         private readonly RabbitMqProducer _rabbitMqProducer=new RabbitMqProducer();
 
@@ -39,7 +39,7 @@ namespace DataMigration
             InitializeComponent();                    
             try
             {
-                _limit = Convert.ToInt32(ConfigurationManager.AppSettings["limit"]);
+                _limitForBatchMigration = Convert.ToInt32(ConfigurationManager.AppSettings["limit"]);
                 var queueName = ConfigurationManager.AppSettings["queueName"];                
                 _rabbitMqConsumer =new RabbitMqConsumer(ConfigurationManager.AppSettings["rabbitMQHost"],ConfigurationManager.AppSettings["rabbitVhost"],queueName);
                 _rabbitMqProducer = new RabbitMqProducer(ConfigurationManager.AppSettings["rabbitMQHost"],ConfigurationManager.AppSettings["rabbitVhost"], queueName);
@@ -50,8 +50,7 @@ namespace DataMigration
                     "Error while getting data from configuration. Error details: \n" + ex.Message + "\n");
             }
             try
-            {              
-               
+            {                             
                 SqlConnectionString = ConfigurationManager.ConnectionStrings["vanguard_database"].ConnectionString;
                 LocalPostgreConnectionString = ConfigurationManager.ConnectionStrings["local_postgres"].ConnectionString;
                 DockerPostgresConnectionString =ConfigurationManager.ConnectionStrings["postgres_from_docker"].ConnectionString;
@@ -70,7 +69,7 @@ namespace DataMigration
             _logger = new Logger.Logger(main);
             _postgresConnect.StartLogConsole(_logger);
             _sqlConnect.StartLogConsole(_logger);
-            _help.StartLogConsole(_logger);
+            _helper.StartLogConsole(_logger);
             _rabbitMqProducer.StartLogConsole(_logger);
             _rabbitMqConsumer.StartLogConsole(_logger);
             _logger.WriteLog(LogLevel.Info, "Start logger \n");
@@ -89,11 +88,11 @@ namespace DataMigration
                 while (totalCount > 0)
                 {
                     _logger.WriteLog(LogLevel.Info, "Get historic data from (Postgres) \n");
-                    var historicalOcrData = _postgresConnect.GetPostgresHistoricData(npgsqlLocalConnection, _limit);
+                    var historicalOcrData = _postgresConnect.GetPostgresHistoricData(npgsqlLocalConnection, _limitForBatchMigration);
                     _logger.WriteLog(LogLevel.Info, "Get matching documents paths \n");
                     var historicalDocsToMigrate = historicalOcrData
-                        .Select(i => _help.ReplaceUnsupportedCharacters(i.FullFilePath, "/", "\\")).ToList();
-                    var resultXmlString = _help.ConvertStringsToXml(historicalDocsToMigrate);
+                        .Select(i => _helper.ReplaceUnsupportedCharacters(i.FullFilePath, "/", "\\")).ToList();
+                    var resultXmlString = _helper.ConvertStringsToXml(historicalDocsToMigrate);
                     var vanguardDocsData = _sqlConnect.GetVanguardDocuments(vanguardConnection, resultXmlString);
                     _logger.WriteLog(LogLevel.Info, "Update documents in (Vanguard) \n");
                     _sqlConnect.UpdateDM_OCR_PROCESS(vanguardConnection, vanguardDocsData);
@@ -101,8 +100,8 @@ namespace DataMigration
                     historicalOcrData =_postgresConnect.RemoveUnmatchingHistoricData(historicalOcrData, vanguardDocsData);
                     _postgresConnect.InsertOcr(npgsqlDockerConnection, historicalOcrData, vanguardDocsData);
                     _logger.WriteLog(LogLevel.Info, "Delete data from historical_ocr (Postgres) \n");
-                    //_postgresConnect.RemoveHistoricalData(npgsqlLocalConnection, historicalOcrData);
-                    totalCount -= _limit;
+                    _postgresConnect.RemoveHistoricalData(npgsqlLocalConnection, historicalOcrData);
+                    totalCount -= _limitForBatchMigration;
                     _logger.WriteLog(LogLevel.Info, $"{totalCount} left \n");
                 }
             }
@@ -135,20 +134,20 @@ namespace DataMigration
 
                         _logger.WriteLog(LogLevel.Info, $"{totalCount} left \n");
                         _logger.WriteLog(LogLevel.Info, "Get historic data from (Postgres) \n");
-                        var historicalOcrData = _postgresConnect.GetPostgresHistoricData(npgsqlLocalConnection, _limit);
+                        var historicalOcrData = _postgresConnect.GetPostgresHistoricData(npgsqlLocalConnection, _limitForBatchMigration);
                         var historicalDocsToMigrate = historicalOcrData
-                            .Select(i => _help.ReplaceUnsupportedCharacters(i.FullFilePath, "/", "\\")).ToList();
-                        var resultXmlString = _help.ConvertStringsToXml(historicalDocsToMigrate);
+                            .Select(i => _helper.ReplaceUnsupportedCharacters(i.FullFilePath, "/", "\\")).ToList();
+                        var resultXmlString = _helper.ConvertStringsToXml(historicalDocsToMigrate);
                         var vanguardDocsData=_sqlConnect.GetVanguardDocuments(vanguardConnection, resultXmlString);
-                        var convertHistoricOcrDataForRabbitConsuming = _help.ConvertHistoricOcrDataForRabbitConsuming(historicalOcrData, vanguardDocsData);
+                        var convertHistoricOcrDataForRabbitConsuming = _helper.ConvertHistoricOcrDataForRabbitConsuming(historicalOcrData, vanguardDocsData);
 
                         _logger.WriteLog(LogLevel.Info, "Send data into (Rabbit) \n");
                         _rabbitMqProducer.SentAllData(convertHistoricOcrDataForRabbitConsuming);
 
                         _logger.WriteLog(LogLevel.Info, "Delete data from historical_ocr (Postgres) \n");
-                        _postgresConnect.RemoveHistoricalData(npgsqlLocalConnection, historicalOcrData);
+                        //_postgresConnect.RemoveHistoricalData(npgsqlLocalConnection, historicalOcrData);
 
-                        totalCount -= _limit;
+                        totalCount -= _limitForBatchMigration;
                     }
                     _logger.WriteLog(LogLevel.Info, "Get data from (Rabbit) \n");
                     _rabbitMqConsumer.Receive(ReceiveMessage);
@@ -156,7 +155,7 @@ namespace DataMigration
                 catch (Exception ex)
                 {
                     _logger.WriteLog(LogLevel.Error,
-                        "Error while trying to open connection strings. Error details: \n" + ex.Message + "\n");
+                        "Error while migration. Error details: \n" + ex.Message + "\n");
                 }
                 finally
                 {

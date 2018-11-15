@@ -14,8 +14,8 @@ namespace DataMigration.Rabbit
         private readonly string _queueName;        
         private IConnection _connection;
         private IModel _consumingChannel;
-        private IConnection Connection => _connection ?? (_connection = _connectionFactory.CreateConnection());
-        private IModel ConsumingChannel => _consumingChannel ?? (_consumingChannel = Connection.CreateModel());
+        public IConnection Connection => _connection ?? (_connection = _connectionFactory.CreateConnection());
+        public IModel ConsumingChannel => _consumingChannel ?? (_consumingChannel = Connection.CreateModel());
 
         private Logger.Logger _log = new Logger.Logger();
 

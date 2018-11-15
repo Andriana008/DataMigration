@@ -49,20 +49,39 @@ namespace DataMigration
                 }
                 catch (Exception ex)
                 {
-                    _log.WriteLog(LogLevel.Error, "Error while getting vanguard documents. Error details: \n" + ex.Message + "\n");
+                    _log.WriteLog(LogLevel.Error,
+                        "Error while getting vanguard documents. Error details: \n" + ex.Message + "\n");
                 }
             }
             return resultStr;
         }
 
-        public List<HistoricalOcrDataForRabbitMq> ConvertHistoricOcrDataForRabbitConsuming(List<HistoricalOcrData> histData,List<VanguardDoc>vanguardDoc)
+        public List<HistoricalOcrDataForRabbitMq> ConvertHistoricOcrDataForRabbitConsuming(
+            List<HistoricalOcrData> histData, List<VanguardDoc>vanguardDoc)
         {
-            if (histData.Count == 0 || vanguardDoc.Count == 0)
+            if (histData.Count == 0 || vanguardDoc.Count == 0 || histData.Count != vanguardDoc.Count)
             {
                 _log.WriteLog(LogLevel.Info, "No data to convert \n");
             }
             _log.WriteLog(LogLevel.Info, "Converting data for Rabbit  \n");
-            return histData.Select((t, i) => new HistoricalOcrDataForRabbitMq(t.TenantId, t.FullFilePath, t.ErrorMessage, t.StatusId, ReplaceUnsupportedCharacters(t.Data, "'", "."), t.CreatedAt, t.UpdatedAt, vanguardDoc[i].DocId)).ToList();
+            List<HistoricalOcrDataForRabbitMq> res = new List<HistoricalOcrDataForRabbitMq>();
+            for (int i = 0; i < histData.Count; i++)
+            {
+
+                res.Add(new HistoricalOcrDataForRabbitMq
+                {
+                    TenantId = histData[i].TenantId,
+                    FullFilePath = histData[i].FullFilePath,
+                    ErrorMessage = histData[i].ErrorMessage,
+                    StatusId = histData[i].StatusId,
+                    Data = histData[i].Data,
+                    CreatedAt = histData[i].CreatedAt,
+                    UpdatedAt = histData[i].UpdatedAt,
+                    DocId = vanguardDoc[i].DocId
+                });
+            }
+            return res;
         }
     }
 }
+
